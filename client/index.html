@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"/>
+<title>Finding Nakamoto — M1</title>
+<script src="https://unpkg.com/htmx.org@1.9.12"></script>
+<script type="importmap" src="/import-map.json"></script>
+<script type="module" src="/modules/vendor/stacks-connect.bundle.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem; }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+  main { border: 1px solid #ddd; padding: 1.5rem; border-radius: 8px; min-height: 240px; }
+  .controls { margin-bottom: 1rem; display: flex; gap: 0.5rem; }
+  .scene-inline button { margin-right: 0.5rem; }
+</style>
+</head><body>
+<header>
+  <button id="btn-connect">Connect Wallet</button>
+  <strong id="addr">Not connected</strong>
+</header>
+<section class="controls">
+  <button
+    type="button"
+    hx-get="/views/embed-inline.html"
+    hx-target="#view"
+    hx-swap="innerHTML">
+    Load Inline Scene
+  </button>
+  <button
+    type="button"
+    hx-get="/views/embed-iframe.html"
+    hx-target="#view"
+    hx-swap="innerHTML">
+    Load Iframe Scene
+  </button>
+</section>
+<main id="view"><h1>Select a scene embed to begin.</h1></main>
+<script type="module" src="modules/wallet.js"></script>
+</body></html>
