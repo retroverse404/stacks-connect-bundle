@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Finding Nakamoto — Spatial Mission Control</title>
+  <script src="https://unpkg.com/htmx.org@2.0.7" integrity="sha384-ZBXiYtYQ6hJ2Y0ZNoYuI+Nq5MqWBr+chMrS/RkXpNzQCApHEhOt2aY8EJgqwHLkJ" crossorigin="anonymous"></script>
+  <script type="importmap" src="./import-map.json"></script>
+  <script type="module" src="./modules/vendor/stacks-connect.bundle.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --bg: #010409;
+      --bg-strong: #030a14;
+      --glass: rgba(6, 12, 18, 0.72);
+      --glass-soft: rgba(8, 14, 20, 0.58);
+      --outline: rgba(255, 255, 255, 0.16);
+      --outline-strong: rgba(255, 255, 255, 0.32);
+      --text: #f5f7fb;
+      --muted: rgba(245, 247, 251, 0.72);
+      --accent: #f7931a;
+      --accent-strong: #ffb347;
+      --accent-soft: rgba(247, 147, 26, 0.16);
+      --glow: rgba(247, 147, 26, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 20% 0%, rgba(247, 147, 26, 0.16), transparent 40%),
+        radial-gradient(circle at 80% 10%, rgba(255, 209, 148, 0.12), transparent 35%),
+        linear-gradient(180deg, rgba(2, 5, 10, 0.9), var(--bg-strong));
+      color: var(--text);
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.06), transparent 45%);
+      filter: blur(120px);
+      opacity: 0.7;
+    }
+
+    .app-shell {
+      position: relative;
+      min-height: 100vh;
+      padding: 2.25rem clamp(1.5rem, 4vw, 4.25rem) 3rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+
+    .glass-panel {
+      border-radius: 28px;
+      border: 1px solid var(--outline);
+      background: var(--glass);
+      backdrop-filter: blur(28px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      padding: 1.5rem;
+    }
+
+    .glass-panel.subtle {
+      background: var(--glass-soft);
+      backdrop-filter: blur(20px);
+    }
+
+    .system-bar {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) minmax(240px, 24%) minmax(260px, 28%);
+      gap: 1.5rem;
+      align-items: stretch;
+      padding: 2rem;
+    }
+
+    .brand-block h1 {
+      margin: 0.15rem 0 0.35rem;
+      font-size: clamp(1.6rem, 2vw, 2.4rem);
+      font-weight: 600;
+    }
+
+    .brand-block p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .operator-card h3 {
+      margin: 0.4rem 0 0.25rem;
+      font-size: 1.15rem;
+    }
+
+    .operator-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .operator-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.75rem;
+    }
+
+    .operator-tags span {
+      border-radius: 999px;
+      padding: 0.3rem 0.8rem;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .wallet-controls {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 0.6rem;
+    }
+
+    .wallet-address {
+      font-family: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+      font-size: 0.9rem;
+      color: var(--muted);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .mission-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .mission-card h2,
+    .narrative-card h2,
+    .signals-card h2 {
+      margin: 0.4rem 0 0.5rem;
+      font-size: 1.4rem;
+    }
+
+    .mission-card p,
+    .narrative-card p,
+    .signals-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .narrative-card ol {
+      margin: 0.85rem 0 0;
+      padding-left: 1.2rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .narrative-card ol li {
+      margin-bottom: 0.35rem;
+    }
+
+    .narrative-card ol li strong {
+      color: var(--text);
+    }
+
+    .tag-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.9rem;
+    }
+
+    .tag-cloud span {
+      border-radius: 12px;
+      padding: 0.35rem 0.8rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.85rem;
+    }
+
+    .signals-list {
+      margin: 0.75rem 0 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      color: var(--muted);
+    }
+
+    .signals-list li {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .signals-list strong {
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.85fr) minmax(420px, 1.75fr);
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    .control-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .module-card {
+      padding: 1.5rem 1.5rem 1.75rem;
+    }
+
+    .module-card header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .module-card header p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .primary-nav {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .nav-chip {
+      border-radius: 16px;
+      padding: 0.85rem 1.1rem;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font-weight: 500;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, border 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .nav-chip.is-active {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, rgba(247, 147, 26, 0.35), rgba(255, 179, 71, 0.25));
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .nav-chip.is-next {
+      border-color: var(--accent-strong);
+      box-shadow: 0 0 20px var(--glow);
+    }
+
+    .nav-chip.is-locked,
+    .nav-chip[aria-disabled='true'] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .nav-chip:not([aria-disabled='true']):hover,
+    .nav-chip:not([aria-disabled='true']):focus-visible {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.06);
+      outline: none;
+    }
+
+    #flow-map {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    #flow-map header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+    }
+
+    #flow-map h2 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    #flow-map p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    #flow-map ol {
+      list-style: none;
+      margin: 0.75rem 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.7rem;
+    }
+
+    #flow-map li {
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 0.65rem 0.9rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      font-size: 0.95rem;
+    }
+
+    #flow-map li.is-active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    #flow-map li.is-complete {
+      border-color: rgba(247, 147, 26, 0.45);
+    }
+
+    #flow-map li.is-next {
+      box-shadow: 0 0 15px var(--glow);
+      border-color: var(--accent-strong);
+    }
+
+    #flow-map li.is-locked {
+      opacity: 0.5;
+    }
+
+    #flow-map li .state {
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .flow-hint {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      min-height: 1.25rem;
+    }
+
+    .flow-hint[data-hint-state='warning'] {
+      color: #ffd28c;
+    }
+
+    .flow-hint[data-hint-state='success'] {
+      color: #7df9b4;
+    }
+
+    .view-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .view-brief {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.5rem 2rem;
+    }
+
+    .view-brief h2 {
+      margin: 0.2rem 0;
+      font-size: 1.5rem;
+    }
+
+    .view-brief p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .status-stack {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .status-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.24em;
+      color: var(--muted);
+    }
+
+    .status-value {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 1.05rem;
+    }
+
+    #view {
+      flex: 1;
+      border-radius: 32px;
+      border: 1px solid var(--outline);
+      padding: 2.25rem;
+      min-height: 520px;
+      background: rgba(5, 9, 14, 0.72);
+      backdrop-filter: blur(32px);
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    .btn {
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      padding: 0.65rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      transition: transform 0.2s ease, background 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(247, 147, 26, 0.95), rgba(255, 179, 71, 0.85));
+      color: #1b0b02;
+      border-color: transparent;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
+    }
+
+    .btn:not(:disabled):hover,
+    .btn:not(:disabled):focus-visible {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.08);
+      outline: none;
+    }
+
+    .btn.primary:not(:disabled):hover,
+    .btn.primary:not(:disabled):focus-visible {
+      background: linear-gradient(135deg, rgba(247, 147, 26, 1), rgba(255, 179, 71, 0.95));
+    }
+
+    .btn:disabled,
+    .btn[aria-disabled='true'],
+    .btn[data-button-locked] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .card {
+      border-radius: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 1.75rem;
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .card h2 {
+      margin: 0.4rem 0 0.6rem;
+      font-size: 1.5rem;
+    }
+
+    .card p {
+      margin: 0.35rem 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .eyebrow {
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.24em;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .actions-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 1.5rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+
+    .stat {
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 1.2rem;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .stat h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1rem;
+    }
+
+    .chat-log {
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 1rem;
+      background: rgba(0, 0, 0, 0.25);
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .chat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .chat-row span {
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .chat-row.user span {
+      color: var(--accent);
+    }
+
+    .guide-form label {
+      display: block;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.65rem;
+    }
+
+    .input-row input {
+      flex: 1;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.42);
+      color: var(--text);
+      padding: 0.65rem 0.9rem;
+      font-size: 1rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 0.85rem;
+      margin: 1rem 0;
+    }
+
+    .status-pill.online {
+      border-color: rgba(247, 147, 26, 0.45);
+      color: var(--accent-strong);
+    }
+
+    .status-pill.offline {
+      color: var(--muted);
+    }
+
+    .error {
+      color: #ffb4a2;
+      margin-top: 0.5rem;
+    }
+
+    .explore-frame {
+      border-radius: 20px;
+      border: 1px dashed rgba(255, 255, 255, 0.22);
+      padding: 1.25rem;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .loading-line {
+      width: 100%;
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), var(--accent), rgba(255, 255, 255, 0.12));
+      background-size: 200% 100%;
+      animation: shimmer 1.2s linear infinite;
+      margin-top: 1rem;
+    }
+
+    .nav-chip.is-denied,
+    .btn.is-denied {
+      animation: deny-shake 0.45s ease;
+    }
+
+    @keyframes deny-shake {
+      0% {
+        transform: translateX(0);
+      }
+      20% {
+        transform: translateX(-4px);
+      }
+      40% {
+        transform: translateX(4px);
+      }
+      60% {
+        transform: translateX(-3px);
+      }
+      80% {
+        transform: translateX(3px);
+      }
+      100% {
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes shimmer {
+      0% {
+        background-position: 0% 50%;
+      }
+      100% {
+        background-position: 200% 50%;
+      }
+    }
+
+    @media (max-width: 1200px) {
+      .system-bar {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 800px) {
+      .view-brief {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      #view {
+        padding: 1.75rem;
+        min-height: 420px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .app-shell {
+        padding: 1.5rem 1.25rem 2rem;
+      }
+
+      .system-bar,
+      .glass-panel {
+        padding: 1.25rem;
+      }
+
+      .mission-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="system-bar glass-panel">
+      <div class="brand-block">
+        <p class="eyebrow">Stacks mint pilot</p>
+        <h1>Finding Nakamoto</h1>
+        <p>Finding Nakamoto is a one-panel console for first-time Stacks collectors. Wallet health, story, and SIP-009 actions stay together so the operator never loses context.</p>
+      </div>
+      <div class="operator-card">
+        <p class="eyebrow">Console brief</p>
+        <h3>Actor at the console</h3>
+        <p>Runs the flow: connect Leather, trigger the SIP-009 mint, and watch the asset + tx status on one panel.</p>
+        <div class="operator-tags">
+          <span>Stacks</span>
+          <span>Leather</span>
+          <span>SIP-009</span>
+        </div>
+      </div>
+      <div class="wallet-controls glass-panel subtle">
+        <button id="btn-connect" type="button" class="btn primary">Connect Wallet</button>
+        <span class="wallet-address" id="addr">Not connected</span>
+      </div>
+    </header>
+
+    <section class="mission-grid">
+      <article class="glass-panel mission-card">
+        <p class="eyebrow">Mission</p>
+        <h2>Prototype objective</h2>
+        <p>We are testing whether onboarding, storytelling, and the SIP-009 mint can live on one panel. Each milestone unlocks the next so the walkthrough feels choreographed, not chaotic.</p>
+        <div class="tag-cloud">
+          <span>Leather connect</span>
+          <span>SIP-009 mint</span>
+          <span>Asset preview</span>
+        </div>
+      </article>
+      <article class="glass-panel narrative-card">
+        <p class="eyebrow">Interaction model</p>
+        <h2>How it flows</h2>
+        <p>The flow mirrors a guided dry run: orient the person, prove the wallet is ready, justify the mint, then show the asset without jumping panes. Each block gates the next so the screen always tells the user what happens now.</p>
+        <ol>
+          <li><strong>Entry</strong> calms the room, confirms Leather pairing, and states the promise in plain words.</li>
+          <li><strong>Dashboard</strong> shows wallet readiness, recent Stacks signal, and mint eligibility so the operator knows whether to proceed.</li>
+          <li><strong>AI Guide</strong> explains why this mint exists and keeps the mint button locked until the story lands.</li>
+          <li><strong>Mint</strong> calls the SIP-009 contract through Leather, shows fees + tx hash inline, and keeps the person on the same surface until confirmation.</li>
+          <li><strong>Explore</strong> swaps inline media so the new collectible occupies the same canvas immediately.</li>
+        </ol>
+      </article>
+      <article class="glass-panel signals-card">
+        <p class="eyebrow">What to look for</p>
+        <h2>Signals to evaluate</h2>
+        <ul class="signals-list">
+          <li><strong>Wallet</strong><span>Does Leather open within two seconds, label the SIP-009 contract, and recover cleanly if the user backs out?</span></li>
+          <li><strong>Guide</strong><span>Does the AI copy clearly state why the mint exists before the button unlocks?</span></li>
+          <li><strong>Scene</strong><span>Can Explore stream media inline without shifting the HUD or dropping frames?</span></li>
+        </ul>
+      </article>
+    </section>
+
+    <main class="workspace">
+      <section class="control-column">
+        <article class="glass-panel module-card">
+          <header>
+            <div>
+              <p class="eyebrow">Module deck</p>
+              <p>Select a screen to preview the interaction. Locked states tell you what to test next.</p>
+            </div>
+          </header>
+          <div class="primary-nav" role="navigation" aria-label="Primary actions">
+            <button class="nav-chip" data-nav-screen="DASHBOARD">Dashboard</button>
+            <button class="nav-chip" data-nav-screen="AI_GUIDE">AI Guide</button>
+            <button class="nav-chip" data-nav-screen="MINT">Mint</button>
+            <button class="nav-chip" data-nav-screen="EXPLORE">Explore</button>
+          </div>
+        </article>
+        <aside id="flow-map" class="glass-panel timeline-card">
+          <header>
+            <div>
+              <p class="eyebrow">Milestone flow</p>
+              <h2>Objective sequence</h2>
+            </div>
+            <p>Track how far the user has progressed.</p>
+          </header>
+          <ol></ol>
+          <p class="flow-hint" data-flow-hint hidden></p>
+        </aside>
+      </section>
+      <section class="view-shell">
+        <div class="glass-panel view-brief">
+          <div>
+            <p class="eyebrow">Interaction canvas</p>
+            <h2>Live module viewport</h2>
+            <p>The active screen renders inside this glass card. Mirror it into demos or stream it into research decks.</p>
+          </div>
+          <div class="status-stack">
+            <div>
+              <span class="status-label">Audio mode</span>
+              <span class="status-value" data-audio-display>Ambient</span>
+            </div>
+            <div>
+              <span class="status-label">Next objective</span>
+              <span class="status-value" data-next-screen>Entry</span>
+            </div>
+          </div>
+        </div>
+        <section id="view" class="glass-panel view-stage" aria-live="polite" aria-label="Experience screens">
+          <noscript>
+            <p>This prototype requires JavaScript to render the milestone flow.</p>
+          </noscript>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./modules/app.js"></script>
+</body>
+</html>
